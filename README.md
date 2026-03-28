@@ -91,6 +91,7 @@ HOST_MANGA_ROOT=/mnt/jellyfin/Manga docker compose up --build
 Additional handoff doc: `docs/mac-handoff-checklist.md`
 Shared sync workflow: `docs/shared-repo-sync-workflow.md`
 Codex resume context: `docs/codex-session-handoff.md`
+Full session export: `docs/chat-session-export-2026-03-28.md`
 
 ## UI Simulator (No Xcode Needed)
 - Browser-based iPhone UI preview lives in `preview/`
