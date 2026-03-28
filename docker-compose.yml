@@ -1,0 +1,16 @@
+services:
+  manga-backend:
+    build:
+      context: ./backend
+    image: manga-reader-backend:local
+    container_name: manga-reader-backend
+    environment:
+      MANGA_ROOT: /data/manga
+      CORS_ALLOW_ORIGINS: "*"
+      HOST: 0.0.0.0
+      PORT: 8080
+    ports:
+      - "8080:8080"
+    volumes:
+      - ${HOST_MANGA_ROOT:-/mnt/jellyfin/Manga}:/data/manga:ro
+    restart: unless-stopped

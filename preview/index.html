@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manga Reader UI Simulator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Literata:opsz,wght@7..72,500;7..72,700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="layout">
+      <section class="panel controls">
+        <h1>Manga Reader UI Simulator</h1>
+        <p class="subhead">Preview your future iPhone app flow in-browser while your Mac is offline.</p>
+
+        <label class="field-label" for="api-base">Backend API Base URL</label>
+        <div class="control-row">
+          <input id="api-base" type="text" value="http://127.0.0.1:8080" autocomplete="off" spellcheck="false" />
+          <button id="connect-btn" class="btn">Connect</button>
+        </div>
+
+        <div class="toggles">
+          <label class="toggle-item">
+            <input id="mock-toggle" type="checkbox" />
+            <span>Use demo data</span>
+          </label>
+          <label class="toggle-item">
+            <input id="single-page-toggle" type="checkbox" />
+            <span>Single-page reader mode</span>
+          </label>
+        </div>
+
+        <div id="status" class="status muted">Waiting for connection...</div>
+
+        <div class="notes">
+          <h2>What You Can Test</h2>
+          <ul>
+            <li>Library list and volume drill-down</li>
+            <li>Reader page navigation and current-page refresh</li>
+            <li>Theme switching: light, dark, and system</li>
+            <li>Progress indicators in volume list</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="phone-wrap" aria-label="iPhone simulator">
+        <div class="phone-shell">
+          <div class="phone-notch"></div>
+          <div class="phone-screen">
+            <header class="screen-header">
+              <button id="back-btn" class="icon-btn is-hidden" aria-label="Go back">←</button>
+              <div class="title-stack">
+                <span id="screen-title">Manga</span>
+                <span id="screen-subtitle" class="subtitle">Library</span>
+              </div>
+              <div class="header-actions">
+                <button id="theme-btn" class="icon-btn" aria-label="Toggle theme">◐</button>
+                <button id="refresh-btn" class="icon-btn" aria-label="Refresh">↻</button>
+              </div>
+            </header>
+
+            <section id="content" class="content" aria-live="polite"></section>
+
+            <footer class="tabbar">
+              <button id="tab-library" class="tab active">Library</button>
+              <button id="tab-reader" class="tab" disabled>Reader</button>
+            </footer>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <template id="row-template">
+      <button class="row" type="button">
+        <img class="row-cover" alt="cover" loading="lazy" />
+        <span class="row-main"></span>
+        <span class="row-meta"></span>
+      </button>
+    </template>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

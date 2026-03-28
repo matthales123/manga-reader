@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Backend
+backend/.env
+backend/.venv/
+backend/.coverage
+backend/htmlcov/
+
+# macOS
+.DS_Store
+
+# Xcode / iOS artifacts
+ios/**/DerivedData/
+ios/**/xcuserdata/
+ios/**/.swiftpm/
+ios/**/build/
+
+# Editors
+.idea/
+.vscode/
+
