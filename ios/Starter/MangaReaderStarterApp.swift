@@ -2,7 +2,7 @@ import SwiftUI
 
 @main
 struct MangaReaderStarterApp: App {
-    private let api = MangaAPI(baseURL: URL(string: "http://YOUR_SERVER_IP:8080")!)
+    private let api = MangaAPI(baseURL: URL(string: "http://192.168.0.239:8080")!)
 
     @StateObject private var settings = AppSettings()
     @StateObject private var readingProgress = ReadingProgressStore()
