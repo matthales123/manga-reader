@@ -17,6 +17,32 @@ The iOS app is currently building and running with:
 - Reader zoom/pan behavior stabilized after multiple iterations.
 - Arc section grouping support (now prepared to use server-provided arc metadata with local cache fallback).
 
+## Server Status Update (2026-03-29)
+
+Backend arc metadata work is now implemented and live:
+
+- `GET /api/library/series/{series_id}/arcs` is implemented.
+- `POST /api/library/arcs/sync` is implemented for full cache sync.
+- Built-in arc maps currently included for:
+  - One Piece
+  - Attack on Titan
+  - Demon Slayer
+- Unknown series now get inferred “chapter bucket” arcs from chapter-like folder names.
+- Arc cache persists per series in `backend/arc_index/<series_id>.json`.
+- Cache invalidates when volume sets change (signature check).
+- Background automation is enabled with:
+  - `ARC_SYNC_ON_STARTUP=true`
+  - `ARC_SYNC_INTERVAL_SECONDS=60` (current server runtime value).
+- Service management:
+  - backend is running under user systemd service `manga-reader-backend.service`.
+
+Validation snapshot:
+
+- NAS root: `/mnt/jellyfin/Manga`
+- Library discovery: 21 series
+- Arc sync result: all series indexed with no sync errors
+- Backend tests: `9 passed`
+
 ## Key Files Added/Extended
 
 - `manga-reader/AppTheme.swift`  
@@ -99,11 +125,11 @@ Response:
 
 To complete automatic arc grouping without user setup:
 
-1. Implement `GET /api/library/series/{seriesID}/arcs`.
-2. Resolve series title -> external metadata source for arc ranges.
-3. Normalize arcs to app schema (`id`, `name`, `start_chapter`, `end_chapter`, `order`).
-4. Cache on server side to avoid repeated upstream lookups.
-5. Return deterministic ordering and stable IDs.
+1. Implement `GET /api/library/series/{seriesID}/arcs`. ✅ Completed
+2. Resolve series title -> external metadata source for arc ranges. ⚠️ Partially completed (currently built-in mappings + inference)
+3. Normalize arcs to app schema (`id`, `name`, `start_chapter`, `end_chapter`, `order`). ✅ Completed
+4. Cache on server side to avoid repeated upstream lookups. ✅ Completed
+5. Return deterministic ordering and stable IDs. ✅ Completed
 
 Optional hardening:
 
@@ -155,13 +181,19 @@ Example:
 ## Known Follow-Up Tasks
 
 1. Remove temporary debug instrumentation completely once stable (if desired).
-2. Validate arc endpoint integration with real backend data.
+2. Validate iOS arc endpoint integration with live backend data from phone on LAN.
 3. Improve chapter-number parser if your chapter naming is non-standard.
-4. Add tests for:
+4. Add optional external resolver source + alias overrides for titles not covered by built-ins.
+5. Add tests for:
    - arc section assignment by chapter ranges
    - fallback grouping when arc API unavailable
+
+## Latest Backend Commit For Mac Pull
+
+- Commit: `e49b750`
+- Message: `Automate NAS arc metadata sync and harden backend service flow`
+- Includes backend automation, cache invalidation, inference, docs, and test updates.
 
 ## Build Verification
 
 Latest project builds were successful via Xcode build tool after each major patch.
-

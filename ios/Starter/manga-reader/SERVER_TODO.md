@@ -71,11 +71,11 @@ Example:
 
 ## Validation Checklist
 
-- [ ] Returns 200 with `items` array.
-- [ ] Handles series with no arc data (`items: []`).
-- [ ] Stable IDs/order across calls.
-- [ ] Numeric chapter ranges parse cleanly.
-- [ ] CORS/firewall/network path still compatible with iOS app LAN access.
+- [x] Returns 200 with `items` array.
+- [x] Handles series with no arc data (`items: []`).
+- [x] Stable IDs/order across calls.
+- [x] Numeric chapter ranges parse cleanly.
+- [x] CORS/firewall/network path still compatible with iOS app LAN access.
 
 ## Current App Integration Points
 
@@ -84,3 +84,27 @@ Example:
 - `LibraryCacheStore.swift`: `loadArcs`, `saveArcs`
 - `manga-reader/VolumeListView.swift`: arc grouping pipeline + fallback
 
+## Status Update (2026-03-29)
+
+Completed on backend:
+
+- Implemented `GET /api/library/series/{series_id}/arcs`.
+- Added built-in normalized arc metadata for:
+  - One Piece
+  - Attack on Titan
+  - Demon Slayer
+- Added cache persistence at `backend/arc_index/<series_id>.json`.
+- Added cache signature invalidation so cache refreshes when series content changes.
+- Added inferred chapter-bucket arcs for unknown series (using chapter-like folder names such as `Chapter 12` / `Episode 12`).
+- Added `POST /api/library/arcs/sync` to warm/sync all series metadata.
+- Added startup + background sync automation controlled by env:
+  - `ARC_SYNC_ON_STARTUP`
+  - `ARC_SYNC_INTERVAL_SECONDS`
+- Verified against NAS root (`/mnt/jellyfin/Manga`) with 21 discovered series and clean sync summary (`errors: []`).
+
+Operational notes:
+
+- Backend service is managed via user systemd service (`manga-reader-backend.service`).
+- Local server `.env` now uses:
+  - `ARC_SYNC_ON_STARTUP=true`
+  - `ARC_SYNC_INTERVAL_SECONDS=60`

@@ -190,3 +190,64 @@ Note:
 3. Remove temporary debug code entirely only after confirming no more reader regressions.
 4. Optional: tune chapter-number parser for custom naming patterns.
 
+## 20) Server endpoint implementation completed
+
+- Implemented backend endpoint:
+  - `GET /api/library/series/{series_id}/arcs`
+- Added server-side arc cache module (`backend/app/arcs.py`) with:
+  - built-in arc metadata for One Piece / Attack on Titan / Demon Slayer
+  - normalized response shape and deterministic ordering
+  - per-series cache files in `backend/arc_index/`
+  - cache signature invalidation based on volume set.
+
+## 21) Arc sync automation added
+
+- Added backend automation in `backend/app/main.py`:
+  - startup warm sync task (`ARC_SYNC_ON_STARTUP`)
+  - periodic background sync loop (`ARC_SYNC_INTERVAL_SECONDS`)
+  - manual endpoint `POST /api/library/arcs/sync?force_refresh=...`
+- Initial startup path was made non-blocking so service stays responsive during large NAS scans.
+
+## 22) NAS scan + metadata coverage validation
+
+- Confirmed NAS root at `/mnt/jellyfin/Manga`.
+- Confirmed live library scan detects 21 series.
+- Ran forced sync:
+  - `POST /api/library/arcs/sync?force_refresh=true`
+  - result: all series refreshed, no errors.
+- Verified stable follow-up sync returns unchanged entries.
+
+## 23) Library scanner hardening for newly added manga
+
+- Fixed volume-kind caching behavior in `backend/app/library.py`:
+  - only positive type detections are cached
+  - avoids stale “not a volume” results when folders are created first and pages are added later.
+- This directly supports the “auto gather metadata when new manga is added” requirement.
+
+## 24) Tests and docs expanded
+
+- Added/updated backend tests:
+  - inferred chapter-bucket arcs for unknown series
+  - sync endpoint behavior
+  - deterministic test startup by disabling background sync in test fixture.
+- Updated backend API contract docs for arc sync and background behavior.
+- Current backend test state: `9 passed`.
+
+## 25) Service and repo operations completed
+
+- Backend now runs as user systemd service:
+  - `manga-reader-backend.service`
+- Added safer `make backend-service-restart-clean` process-kill logic.
+- Pushed backend automation commit to GitHub:
+  - `e49b750` (`Automate NAS arc metadata sync and harden backend service flow`).
+
+## 26) Current session updates (2026-03-29)
+
+- Requested: change arc sync polling cadence to 60 seconds.
+- Applied on server local env:
+  - `ARC_SYNC_INTERVAL_SECONDS=60`
+- Requested: refresh handoff docs without deleting prior content.
+- Updated:
+  - `SERVER_TODO.md`
+  - `SESSION_ARCHIVE.md`
+  - `SESSION_HANDOFF.md`
