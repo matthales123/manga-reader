@@ -8,7 +8,6 @@
 import SwiftUI
 import SwiftData
 
-@main
 struct manga_readerApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
