@@ -18,6 +18,8 @@ TITLE_ALIASES: dict[str, str] = {
     "shingeki no kyojin": "attack_on_titan",
     "demon slayer": "demon_slayer",
     "kimetsu no yaiba": "demon_slayer",
+    "demon slayer kimetsu no yaiba": "demon_slayer",
+    "kimetsu no yaiba demon slayer": "demon_slayer",
 }
 
 
@@ -367,4 +369,5 @@ class ArcCatalog:
     @staticmethod
     def _resolve_source_key(title: str) -> str | None:
         cleaned = re.sub(r"\s*\((en|english)\)\s*$", "", title, flags=re.IGNORECASE).strip().lower()
-        return TITLE_ALIASES.get(cleaned)
+        canonical = re.sub(r"[^a-z0-9]+", " ", cleaned).strip()
+        return TITLE_ALIASES.get(cleaned) or TITLE_ALIASES.get(canonical)
