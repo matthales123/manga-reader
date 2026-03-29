@@ -246,8 +246,11 @@ class MangaLibrary:
 
     def _volume_kind(self, path: Path) -> str | None:
         rel_key = path.relative_to(self.root).as_posix() if self.root in path.parents else path.as_posix()
-        if rel_key in self._volume_kind_cache:
-            return self._volume_kind_cache[rel_key]
+        cached_kind = self._volume_kind_cache.get(rel_key)
+        # Only cache positive classifications. This keeps detection resilient when a
+        # folder is created first and image pages arrive later.
+        if cached_kind is not None:
+            return cached_kind
 
         kind: str | None = None
         if self._is_archive(path):
@@ -255,7 +258,10 @@ class MangaLibrary:
         elif path.is_dir() and self._looks_like_manga_volume(path):
             kind = "directory"
 
-        self._volume_kind_cache[rel_key] = kind
+        if kind is not None:
+            self._volume_kind_cache[rel_key] = kind
+        else:
+            self._volume_kind_cache.pop(rel_key, None)
         return kind
 
     @staticmethod

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import datetime, timezone
@@ -8,6 +9,7 @@ from pathlib import Path
 from .library import MangaLibrary, MangaNotFoundError
 
 RawArc = dict[str, object]
+CHAPTER_BUCKET_SIZE = 25
 
 
 TITLE_ALIASES: dict[str, str] = {
@@ -86,14 +88,21 @@ class ArcCatalog:
         self.library = library
         self.cache_root = cache_root.expanduser().resolve()
 
-    def list_arcs(self, series_id: str) -> list[dict]:
+    def list_arcs(self, series_id: str, *, force_refresh: bool = False) -> list[dict]:
         series = self._series_by_id(series_id)
+        return self._list_arcs_for_series(series, force_refresh=force_refresh)
+
+    def _list_arcs_for_series(self, series: dict, *, force_refresh: bool = False) -> list[dict]:
+        series_id = series["id"]
 
         # "Singles" does not represent a real named series.
         if series["relative_path"] == ".":
             return []
 
-        cached = self._read_cache(series_id)
+        volumes = self.library.list_volumes(series_id)
+        signature = self._volumes_signature(volumes)
+
+        cached = None if force_refresh else self._read_cache(series_id, signature)
         if cached is not None:
             return cached
 
@@ -102,17 +111,54 @@ class ArcCatalog:
             items = self._normalize_items(BUILTIN_ARCS[source_key])
             source_name = f"builtin:{source_key}"
         else:
-            items = []
-            source_name = "none"
+            items = self._infer_items_from_volumes(series["title"], volumes)
+            source_name = "inferred:chapter-buckets" if items else "none"
 
         self._write_cache(
             series_id=series_id,
             series_title=series["title"],
             source=source_name,
+            series_signature=signature,
             items=items,
         )
 
         return items
+
+    def sync_all_series(self, *, force_refresh: bool = False) -> dict:
+        summary = {
+            "series_total": 0,
+            "created": 0,
+            "refreshed": 0,
+            "unchanged": 0,
+            "errors": [],
+        }
+
+        for series in self.library.list_series():
+            # Skip root-level "Singles" pseudo-series.
+            if series.get("relative_path") == ".":
+                continue
+
+            series_id = series["id"]
+            summary["series_total"] += 1
+
+            cache_path = self._cache_path(series_id)
+            before_mtime = cache_path.stat().st_mtime if cache_path.exists() else None
+
+            try:
+                self._list_arcs_for_series(series, force_refresh=force_refresh)
+            except Exception as exc:  # noqa: BLE001
+                summary["errors"].append({"series_id": series_id, "error": str(exc)})
+                continue
+
+            after_mtime = cache_path.stat().st_mtime if cache_path.exists() else None
+            if before_mtime is None and after_mtime is not None:
+                summary["created"] += 1
+            elif before_mtime is not None and after_mtime is not None and after_mtime != before_mtime:
+                summary["refreshed"] += 1
+            else:
+                summary["unchanged"] += 1
+
+        return summary
 
     def _series_by_id(self, series_id: str) -> dict:
         for series in self.library.list_series():
@@ -123,7 +169,7 @@ class ArcCatalog:
     def _cache_path(self, series_id: str) -> Path:
         return self.cache_root / f"{series_id}.json"
 
-    def _read_cache(self, series_id: str) -> list[dict] | None:
+    def _read_cache(self, series_id: str, signature: str) -> list[dict] | None:
         path = self._cache_path(series_id)
         if not path.is_file():
             return None
@@ -137,6 +183,10 @@ class ArcCatalog:
         if not isinstance(items, list):
             return None
 
+        cached_signature = raw.get("series_signature")
+        if cached_signature and isinstance(cached_signature, str) and cached_signature != signature:
+            return None
+
         return self._normalize_items(items)
 
     def _write_cache(
@@ -144,6 +194,7 @@ class ArcCatalog:
         series_id: str,
         series_title: str,
         source: str,
+        series_signature: str,
         items: list[dict],
     ) -> None:
         self.cache_root.mkdir(parents=True, exist_ok=True)
@@ -152,12 +203,93 @@ class ArcCatalog:
             "series_title": series_title,
             "source": source,
             "updated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "series_signature": series_signature,
             "items": items,
         }
         self._cache_path(series_id).write_text(
             json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
+
+    def _infer_items_from_volumes(self, series_title: str, volumes: list[dict]) -> list[dict]:
+        chapter_numbers: list[float] = []
+        for volume in volumes:
+            title = str(volume.get("title") or "")
+            relative_path = str(volume.get("relative_path") or "")
+            chapter = self._extract_chapter_number(title)
+            if chapter is None:
+                chapter = self._extract_chapter_number(relative_path)
+            if chapter is not None:
+                chapter_numbers.append(chapter)
+
+        if not chapter_numbers:
+            return []
+
+        unique = sorted(set(chapter_numbers))
+        if len(unique) < 3:
+            return []
+
+        min_chapter = min(unique)
+        max_chapter = max(unique)
+
+        bucket_start_to_values: dict[int, list[float]] = {}
+        for chapter in unique:
+            base = chapter if chapter > 0 else 1.0
+            bucket_index = int((base - 1) // CHAPTER_BUCKET_SIZE)
+            bucket_start = bucket_index * CHAPTER_BUCKET_SIZE + 1
+            bucket_start_to_values.setdefault(bucket_start, []).append(chapter)
+
+        series_slug = self._slug(series_title)
+        items: list[dict] = []
+        for order, bucket_start in enumerate(sorted(bucket_start_to_values.keys()), start=1):
+            nominal_end = bucket_start + CHAPTER_BUCKET_SIZE - 1
+            if nominal_end >= max_chapter:
+                bucket_end = max_chapter
+            else:
+                bucket_end = float(nominal_end)
+
+            start_value = float(bucket_start)
+            if start_value < min_chapter:
+                start_value = min_chapter
+
+            start_label = self._format_number(start_value)
+            end_label = self._format_number(bucket_end)
+            items.append(
+                {
+                    "id": f"{series_slug}-chapters-{start_label}-to-{end_label}",
+                    "name": f"Chapters {start_label}-{end_label}",
+                    "start_chapter": start_value,
+                    "end_chapter": bucket_end,
+                    "order": order,
+                }
+            )
+
+        return items
+
+    @staticmethod
+    def _extract_chapter_number(text: str) -> float | None:
+        matches = re.findall(r"(\d+(?:\.\d+)?)", text)
+        if not matches:
+            return None
+
+        # Use the last numeric token to support names like "Vol 01 Ch 005".
+        candidate = matches[-1]
+        try:
+            return float(candidate)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _format_number(value: float) -> str:
+        if float(value).is_integer():
+            return str(int(value))
+        return str(value).rstrip("0").rstrip(".")
+
+    @staticmethod
+    def _volumes_signature(volumes: list[dict]) -> str:
+        parts = [str(v.get("relative_path") or v.get("title") or "") for v in volumes]
+        payload = "\n".join(sorted(parts)).encode("utf-8")
+        return hashlib.sha1(payload).hexdigest()
 
     @staticmethod
     def _normalize_items(items: list[object]) -> list[dict]:

@@ -88,6 +88,29 @@ Notes:
 - `start_chapter` and `end_chapter` are nullable numeric values.
 - Returns `items: []` when no arc data is available for the series.
 - Server caches normalized arc responses under `ARC_INDEX_ROOT` (default: `backend/arc_index`).
+- For unknown series, server auto-inferrs chapter bucket arcs from chapter-style names (`Chapter 1`, `Episode 1`, etc.).
+
+## Sync Arc Cache
+`POST /api/library/arcs/sync`
+
+Query params:
+- `force_refresh` (optional, default `false`)
+
+Response:
+
+```json
+{
+  "series_total": 24,
+  "created": 24,
+  "refreshed": 0,
+  "unchanged": 0,
+  "errors": []
+}
+```
+
+Background behavior:
+- On backend startup, arc cache sync runs once when `ARC_SYNC_ON_STARTUP=true`.
+- Then runs periodically every `ARC_SYNC_INTERVAL_SECONDS` (minimum loop interval is 30 seconds).
 
 ## List Pages
 `GET /api/library/volumes/{volume_id}/pages`

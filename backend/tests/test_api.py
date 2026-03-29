@@ -165,6 +165,46 @@ def test_series_arcs_endpoint_prefers_cached_data(client_and_root):
     assert items[0]["end_chapter"] == 20.0
 
 
+def test_series_arcs_endpoint_infers_chapter_buckets_for_unknown_series(client_and_root):
+    client, root = client_and_root
+
+    for chapter in range(1, 31):
+        chapter_dir = root / "Mashle" / f"Chapter {chapter}"
+        chapter_dir.mkdir(parents=True, exist_ok=True)
+        for page in ["001.jpg", "002.jpg", "003.jpg"]:
+            (chapter_dir / page).write_bytes(b"img")
+
+    series_resp = client.get("/api/library/series")
+    series_item = next(item for item in series_resp.json()["items"] if item["title"] == "Mashle")
+    series_id = series_item["id"]
+
+    arcs_resp = client.get(f"/api/library/series/{series_id}/arcs")
+    assert arcs_resp.status_code == 200
+    items = arcs_resp.json()["items"]
+
+    assert [item["name"] for item in items] == ["Chapters 1-25", "Chapters 26-30"]
+    assert items[0]["start_chapter"] == 1.0
+    assert items[0]["end_chapter"] == 25.0
+    assert items[1]["start_chapter"] == 26.0
+    assert items[1]["end_chapter"] == 30.0
+
+
+def test_arcs_sync_endpoint_creates_cache_for_series(client_and_root):
+    client, root = client_and_root
+
+    chapter_dir = root / "Frieren" / "Chapter 1"
+    chapter_dir.mkdir(parents=True, exist_ok=True)
+    for page in ["001.jpg", "002.jpg", "003.jpg"]:
+        (chapter_dir / page).write_bytes(b"img")
+
+    sync_resp = client.post("/api/library/arcs/sync")
+    assert sync_resp.status_code == 200
+    payload = sync_resp.json()
+    assert payload["series_total"] >= 1
+    assert payload["created"] >= 1
+    assert "errors" in payload
+
+
 def test_path_traversal_is_rejected(client_and_root):
     client, root = client_and_root
     _ = root

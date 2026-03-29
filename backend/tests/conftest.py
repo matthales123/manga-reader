@@ -14,6 +14,8 @@ from app.library import MangaLibrary
 def client_and_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     test_library = MangaLibrary(tmp_path)
     test_arc_catalog = ArcCatalog(library=test_library, cache_root=tmp_path / "_arc_index")
+    monkeypatch.setattr(main_module, "ARC_SYNC_ON_STARTUP", False)
+    monkeypatch.setattr(main_module, "ARC_SYNC_INTERVAL_SECONDS", 0)
     monkeypatch.setattr(main_module, "library", test_library)
     monkeypatch.setattr(main_module, "arc_catalog", test_arc_catalog)
     with TestClient(main_module.app) as client:

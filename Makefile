@@ -46,7 +46,11 @@ backend-service-restart:
 
 backend-service-restart-clean:
 	systemctl --user stop manga-reader-backend.service || true
-	pkill -f "/home/mhales/manga-reader/backend/.venv/bin/uvicorn app.main:app" || true
+	@current="$$$$"; \
+	pids="$$(pgrep -f "/home/mhales/manga-reader/backend/.venv/bin/uvicorn app.main:app" || true)"; \
+	for pid in $$pids; do \
+		if [ "$$pid" != "$$current" ]; then kill "$$pid" || true; fi; \
+	done
 	systemctl --user start manga-reader-backend.service
 	systemctl --user status manga-reader-backend.service --no-pager || true
 

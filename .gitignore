@@ -11,6 +11,7 @@ backend/.env
 backend/.venv/
 backend/.coverage
 backend/htmlcov/
+backend/arc_index/*.json
 
 # macOS
 .DS_Store
@@ -24,4 +25,3 @@ ios/**/build/
 # Editors
 .idea/
 .vscode/
-

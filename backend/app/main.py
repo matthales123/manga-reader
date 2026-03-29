@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 from pathlib import Path
 
@@ -21,6 +23,12 @@ MANGA_ROOT = Path(os.getenv("MANGA_ROOT", "/home/mhales/NAS/Manga"))
 library = MangaLibrary(MANGA_ROOT)
 ARC_INDEX_ROOT = Path(os.getenv("ARC_INDEX_ROOT", str((Path(__file__).resolve().parents[1] / "arc_index"))))
 arc_catalog = ArcCatalog(library=library, cache_root=ARC_INDEX_ROOT)
+ARC_SYNC_INTERVAL_SECONDS = int(os.getenv("ARC_SYNC_INTERVAL_SECONDS", "300"))
+ARC_SYNC_ON_STARTUP = os.getenv("ARC_SYNC_ON_STARTUP", "true").lower() in {"1", "true", "yes", "on"}
+
+logger = logging.getLogger(__name__)
+arc_sync_task: asyncio.Task | None = None
+arc_warmup_task: asyncio.Task | None = None
 
 app = FastAPI(
     title="Manga Reader Backend",
@@ -35,6 +43,43 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+async def run_arc_sync_once(force_refresh: bool = False) -> dict:
+    summary = await asyncio.to_thread(arc_catalog.sync_all_series, force_refresh=force_refresh)
+    logger.info("Arc metadata sync summary: %s", summary)
+    return summary
+
+
+async def arc_sync_loop() -> None:
+    interval = max(30, ARC_SYNC_INTERVAL_SECONDS)
+    await asyncio.sleep(interval)
+    while True:
+        try:
+            await run_arc_sync_once(force_refresh=False)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Arc sync loop iteration failed: %s", exc)
+        await asyncio.sleep(interval)
+
+
+@app.on_event("startup")
+async def startup_tasks() -> None:
+    global arc_sync_task, arc_warmup_task
+    if ARC_SYNC_ON_STARTUP:
+        arc_warmup_task = asyncio.create_task(run_arc_sync_once(force_refresh=False))
+    if ARC_SYNC_INTERVAL_SECONDS > 0:
+        arc_sync_task = asyncio.create_task(arc_sync_loop())
+
+
+@app.on_event("shutdown")
+async def shutdown_tasks() -> None:
+    global arc_sync_task, arc_warmup_task
+    if arc_sync_task is not None:
+        arc_sync_task.cancel()
+        arc_sync_task = None
+    if arc_warmup_task is not None:
+        arc_warmup_task.cancel()
+        arc_warmup_task = None
 
 
 @app.get("/health")
@@ -89,6 +134,12 @@ def list_series_arcs(series_id: str) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return {"items": items}
+
+
+@app.post("/api/library/arcs/sync")
+async def sync_series_arcs(force_refresh: bool = False) -> dict:
+    summary = await run_arc_sync_once(force_refresh=force_refresh)
+    return summary
 
 
 @app.get("/api/library/volumes/{volume_id}/pages")
