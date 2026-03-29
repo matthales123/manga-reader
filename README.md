@@ -21,6 +21,7 @@ manga-reader/
 - Supports manga volumes as `.cbz`/`.zip` or image folders
 - Lists series, volumes, pages
 - Serves optional series cover images (`cover.jpg`, `folder.jpg`, `poster.jpg`)
+- Serves story-arc metadata for supported series via `/api/library/series/{series_id}/arcs`
 - Streams page image bytes for reader display
 - Rejects invalid/traversal-style path access
 
@@ -87,6 +88,7 @@ HOST_MANGA_ROOT=/mnt/jellyfin/Manga docker compose up --build
 - `GET /api/library/series`
 - `GET /api/library/series/{series_id}/volumes`
 - `GET /api/library/series/{series_id}/cover`
+- `GET /api/library/series/{series_id}/arcs`
 - `GET /api/library/volumes/{volume_id}/pages`
 - `GET /api/library/volumes/{volume_id}/pages/{page_index}`
 

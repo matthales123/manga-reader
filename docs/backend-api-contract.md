@@ -65,6 +65,30 @@ Cover file lookup inside each series folder:
 - `poster.jpg` / `poster.jpeg` / `poster.png` / `poster.webp`
 - fallback: first image file directly in the series folder
 
+## Get Series Arcs
+`GET /api/library/series/{series_id}/arcs`
+
+Response:
+
+```json
+{
+  "items": [
+    {
+      "id": "aot-trost",
+      "name": "Trost Arc",
+      "start_chapter": 3,
+      "end_chapter": 14,
+      "order": 2
+    }
+  ]
+}
+```
+
+Notes:
+- `start_chapter` and `end_chapter` are nullable numeric values.
+- Returns `items: []` when no arc data is available for the series.
+- Server caches normalized arc responses under `ARC_INDEX_ROOT` (default: `backend/arc_index`).
+
 ## List Pages
 `GET /api/library/volumes/{volume_id}/pages`
 

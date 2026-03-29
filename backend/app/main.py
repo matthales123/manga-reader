@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
+from .arcs import ArcCatalog
 from .library import MangaBadRequestError, MangaLibrary, MangaNotFoundError
 
 
@@ -18,6 +19,8 @@ def parse_allowed_origins() -> list[str]:
 
 MANGA_ROOT = Path(os.getenv("MANGA_ROOT", "/home/mhales/NAS/Manga"))
 library = MangaLibrary(MANGA_ROOT)
+ARC_INDEX_ROOT = Path(os.getenv("ARC_INDEX_ROOT", str((Path(__file__).resolve().parents[1] / "arc_index"))))
+arc_catalog = ArcCatalog(library=library, cache_root=ARC_INDEX_ROOT)
 
 app = FastAPI(
     title="Manga Reader Backend",
@@ -74,6 +77,18 @@ def read_series_cover(series_id: str) -> Response:
         media_type=media_type,
         headers={"Cache-Control": "public, max-age=86400"},
     )
+
+
+@app.get("/api/library/series/{series_id}/arcs")
+def list_series_arcs(series_id: str) -> dict:
+    try:
+        items = arc_catalog.list_arcs(series_id)
+    except MangaNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except MangaBadRequestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {"items": items}
 
 
 @app.get("/api/library/volumes/{volume_id}/pages")

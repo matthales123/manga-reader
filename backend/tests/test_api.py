@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import zipfile
 
 
@@ -82,6 +83,86 @@ def test_series_cover_endpoint(client_and_root):
     assert cover_resp.status_code == 200
     assert cover_resp.content == b"cover-bytes"
     assert cover_resp.headers["content-type"].startswith("image/")
+
+
+def test_series_arcs_endpoint_builtin_resolution(client_and_root):
+    client, root = client_and_root
+
+    for page in ["001.jpg", "002.jpg", "003.jpg"]:
+        write_image(root / "Attack on Titan" / "Vol 001" / page)
+
+    series_resp = client.get("/api/library/series")
+    series_item = next(item for item in series_resp.json()["items"] if item["title"] == "Attack on Titan")
+    series_id = series_item["id"]
+
+    arcs_resp = client.get(f"/api/library/series/{series_id}/arcs")
+    assert arcs_resp.status_code == 200
+
+    items = arcs_resp.json()["items"]
+    assert len(items) >= 2
+    assert items[0]["id"] == "aot-fall-of-shiganshina"
+    assert items[0]["name"] == "Fall of Shiganshina Arc"
+    assert items[0]["start_chapter"] == 1.0
+    assert items[0]["end_chapter"] == 2.0
+    assert [arc["order"] for arc in items] == sorted(arc["order"] for arc in items)
+
+
+def test_series_arcs_endpoint_empty_for_unknown_series(client_and_root):
+    client, root = client_and_root
+
+    for page in ["001.jpg", "002.jpg", "003.jpg"]:
+        write_image(root / "My Indie Manga" / "Vol 001" / page)
+
+    series_resp = client.get("/api/library/series")
+    series_item = next(item for item in series_resp.json()["items"] if item["title"] == "My Indie Manga")
+    series_id = series_item["id"]
+
+    arcs_resp = client.get(f"/api/library/series/{series_id}/arcs")
+    assert arcs_resp.status_code == 200
+    assert arcs_resp.json()["items"] == []
+
+
+def test_series_arcs_endpoint_prefers_cached_data(client_and_root):
+    client, root = client_and_root
+
+    for page in ["001.jpg", "002.jpg", "003.jpg"]:
+        write_image(root / "One Piece" / "Vol 001" / page)
+
+    series_resp = client.get("/api/library/series")
+    series_item = next(item for item in series_resp.json()["items"] if item["title"] == "One Piece")
+    series_id = series_item["id"]
+
+    cache_root = root / "_arc_index"
+    cache_root.mkdir(parents=True, exist_ok=True)
+    (cache_root / f"{series_id}.json").write_text(
+        json.dumps(
+            {
+                "series_id": series_id,
+                "series_title": "One Piece",
+                "source": "test-override",
+                "updated_at": "2026-03-29T00:00:00Z",
+                "items": [
+                    {
+                        "id": "op-custom-arc",
+                        "name": "Custom Arc",
+                        "start_chapter": 10,
+                        "end_chapter": 20,
+                        "order": 1,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    arcs_resp = client.get(f"/api/library/series/{series_id}/arcs")
+    assert arcs_resp.status_code == 200
+    items = arcs_resp.json()["items"]
+    assert len(items) == 1
+    assert items[0]["id"] == "op-custom-arc"
+    assert items[0]["name"] == "Custom Arc"
+    assert items[0]["start_chapter"] == 10.0
+    assert items[0]["end_chapter"] == 20.0
 
 
 def test_path_traversal_is_rejected(client_and_root):
