@@ -63,9 +63,17 @@ cd /home/mhales/manga-reader
 make backend-run
 ```
 
+Or install persistent user service:
+
+```bash
+cd /home/mhales/manga-reader
+make backend-service-install
+```
+
 6. Open docs:
 
 - `http://<server-lan-ip>:8080/docs`
+- Systemd service guide: `docs/backend-systemd-service.md`
 
 ## Optional Docker Run
 
