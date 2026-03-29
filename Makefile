@@ -1,4 +1,4 @@
-.PHONY: help backend-install backend-run backend-test preview-run backend-service-install backend-service-start backend-service-stop backend-service-restart backend-service-status backend-service-logs
+.PHONY: help backend-install backend-run backend-test preview-run backend-service-install backend-service-start backend-service-stop backend-service-restart backend-service-restart-clean backend-service-status backend-service-logs
 
 help:
 	@echo "Targets:"
@@ -9,6 +9,7 @@ help:
 	@echo "  make backend-service-start   - start backend user service"
 	@echo "  make backend-service-stop    - stop backend user service"
 	@echo "  make backend-service-restart - restart backend user service"
+	@echo "  make backend-service-restart-clean - stop service, kill stale manual process, then start"
 	@echo "  make backend-service-status  - show backend user service status"
 	@echo "  make backend-service-logs    - tail backend user service logs"
 	@echo "  make preview-run      - run browser UI simulator on port 4173"
@@ -18,6 +19,11 @@ backend-install:
 	cd backend && . .venv/bin/activate && pip install -r requirements-dev.txt
 
 backend-run:
+	@if systemctl --user is-active --quiet manga-reader-backend.service; then \
+		echo "Backend user service is running on port 8080."; \
+		echo "Use 'make backend-service-logs' or stop service first with 'make backend-service-stop'."; \
+		exit 1; \
+	fi
 	cd backend && ./run.sh
 
 backend-test:
@@ -38,8 +44,14 @@ backend-service-stop:
 backend-service-restart:
 	systemctl --user restart manga-reader-backend.service
 
+backend-service-restart-clean:
+	systemctl --user stop manga-reader-backend.service || true
+	pkill -f "/home/mhales/manga-reader/backend/.venv/bin/uvicorn app.main:app" || true
+	systemctl --user start manga-reader-backend.service
+	systemctl --user status manga-reader-backend.service --no-pager || true
+
 backend-service-status:
-	systemctl --user status manga-reader-backend.service --no-pager
+	systemctl --user status manga-reader-backend.service --no-pager || true
 
 backend-service-logs:
 	journalctl --user -u manga-reader-backend.service -f

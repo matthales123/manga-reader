@@ -23,9 +23,13 @@ Then it enables and starts it with `systemctl --user`.
 cd /home/mhales/manga-reader
 make backend-service-status
 make backend-service-restart
+make backend-service-restart-clean
 make backend-service-stop
 make backend-service-logs
 ```
+
+`backend-service-restart-clean` is useful if you accidentally started a manual backend process and got:
+`address already in use` on port `8080`.
 
 ## Start At Boot / After Logout
 
@@ -40,6 +44,7 @@ sudo loginctl enable-linger $USER
 - Uses `backend/run.sh` as `ExecStart`
 - Loads environment from `backend/.env`
 - Restarts automatically if it crashes (`Restart=always`)
+- Avoid running `make backend-run` while the service is active.
 
 ## Verify From Phone
 
