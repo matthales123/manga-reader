@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
-from .arcs import ArcCatalog
+from .arcs import ArcCatalog, ArcExternalResolver
 from .library import MangaBadRequestError, MangaLibrary, MangaNotFoundError
 
 
@@ -23,7 +23,18 @@ MANGA_ROOT = Path(os.getenv("MANGA_ROOT", "/home/mhales/NAS/Manga"))
 library = MangaLibrary(MANGA_ROOT)
 ARC_INDEX_ROOT = Path(os.getenv("ARC_INDEX_ROOT", str((Path(__file__).resolve().parents[1] / "arc_index"))))
 ARC_TEMPLATE_ROOT = Path(os.getenv("ARC_TEMPLATE_ROOT", str((Path(__file__).resolve().parents[1] / "arc_templates"))))
-arc_catalog = ArcCatalog(library=library, cache_root=ARC_INDEX_ROOT, template_root=ARC_TEMPLATE_ROOT)
+ARC_EXTERNAL_LOOKUP_ENABLED = os.getenv("ARC_EXTERNAL_LOOKUP_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+ARC_EXTERNAL_LOOKUP_TIMEOUT_SECONDS = float(os.getenv("ARC_EXTERNAL_LOOKUP_TIMEOUT_SECONDS", "8"))
+external_arc_resolver = ArcExternalResolver(
+    enabled=ARC_EXTERNAL_LOOKUP_ENABLED,
+    timeout_seconds=ARC_EXTERNAL_LOOKUP_TIMEOUT_SECONDS,
+)
+arc_catalog = ArcCatalog(
+    library=library,
+    cache_root=ARC_INDEX_ROOT,
+    template_root=ARC_TEMPLATE_ROOT,
+    external_resolver=external_arc_resolver,
+)
 ARC_SYNC_INTERVAL_SECONDS = int(os.getenv("ARC_SYNC_INTERVAL_SECONDS", "300"))
 ARC_SYNC_ON_STARTUP = os.getenv("ARC_SYNC_ON_STARTUP", "true").lower() in {"1", "true", "yes", "on"}
 

@@ -5,11 +5,13 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib import parse, request
 
 from .library import MangaLibrary, MangaNotFoundError
 
 RawArc = dict[str, object]
 CHAPTER_BUCKET_SIZE = 25
+WIKIPEDIA_API_ENDPOINT = "https://en.wikipedia.org/w/api.php"
 
 
 TITLE_ALIASES: dict[str, str] = {
@@ -40,6 +42,12 @@ TITLE_ALIASES: dict[str, str] = {
     "sword art online mother s rosary": "sao_mothers_rosary",
     "sword art online ordinal scale": "sao_ordinal_scale",
     "sword art online lycoris": "sao_lycoris",
+    "black clover": "black_clover",
+    "fullmetal alchemist": "fullmetal_alchemist",
+    "gosick": "gosick",
+    "konosuba god s blessing on this wonderful world": "konosuba",
+    "solo leveling": "solo_leveling",
+    "the beginning after the end": "the_beginning_after_the_end",
 }
 
 
@@ -231,16 +239,311 @@ BUILTIN_ARCS: dict[str, list[RawArc]] = {
     "sao_lycoris": [
         {"id": "sao-lycoris", "name": "Lycoris Arc", "start_chapter": 1, "end_chapter": 16, "order": 1},
     ],
+    "black_clover": [
+        {"id": "bc-magic-knights-exam", "name": "Magic Knights Entrance Exam Arc", "start_chapter": 1, "end_chapter": 10, "order": 1},
+        {"id": "bc-dungeon-exploration", "name": "Dungeon Exploration Arc", "start_chapter": 11, "end_chapter": 21, "order": 2},
+        {"id": "bc-royal-capital-assault", "name": "Royal Capital Assault Arc", "start_chapter": 22, "end_chapter": 37, "order": 3},
+        {"id": "bc-eye-of-midnight-sun", "name": "Eye of the Midnight Sun Arc", "start_chapter": 38, "end_chapter": 56, "order": 4},
+        {"id": "bc-seabed-temple", "name": "Seabed Temple Arc", "start_chapter": 57, "end_chapter": 74, "order": 5},
+        {"id": "bc-witches-forest", "name": "Witches' Forest Arc", "start_chapter": 75, "end_chapter": 101, "order": 6},
+        {"id": "bc-royal-knights", "name": "Royal Knights Arc", "start_chapter": 102, "end_chapter": 149, "order": 7},
+        {"id": "bc-elf-reincarnation", "name": "Elf Reincarnation Arc", "start_chapter": 150, "end_chapter": 228, "order": 8},
+        {"id": "bc-heart-kingdom", "name": "Heart Kingdom Joint Struggle Arc", "start_chapter": 229, "end_chapter": 260, "order": 9},
+        {"id": "bc-spade-kingdom-raid", "name": "Spade Kingdom Raid Arc", "start_chapter": 261, "end_chapter": 331, "order": 10},
+        {"id": "bc-final-wizard-king", "name": "Final Wizard King Arc", "start_chapter": 332, "end_chapter": None, "order": 11},
+    ],
+    "fullmetal_alchemist": [
+        {"id": "fma-city-of-heresy", "name": "City of Heresy Arc", "start_chapter": 1, "end_chapter": 4, "order": 1},
+        {"id": "fma-battle-on-the-train", "name": "Battle on the Train Arc", "start_chapter": 5, "end_chapter": 9, "order": 2},
+        {"id": "fma-laboratory-5", "name": "Laboratory 5 Arc", "start_chapter": 10, "end_chapter": 18, "order": 3},
+        {"id": "fma-dublith", "name": "Dublith Arc", "start_chapter": 19, "end_chapter": 31, "order": 4},
+        {"id": "fma-hughes-investigation", "name": "Hughes Investigation Arc", "start_chapter": 32, "end_chapter": 35, "order": 5},
+        {"id": "fma-rush-valley", "name": "Rush Valley Arc", "start_chapter": 36, "end_chapter": 39, "order": 6},
+        {"id": "fma-devils-nest", "name": "Devil's Nest Arc", "start_chapter": 40, "end_chapter": 52, "order": 7},
+        {"id": "fma-briggs-fortress", "name": "Briggs Fortress Arc", "start_chapter": 53, "end_chapter": 64, "order": 8},
+        {"id": "fma-promised-day", "name": "Promised Day Arc", "start_chapter": 65, "end_chapter": 108.5, "order": 9},
+    ],
+    "gosick": [
+        {"id": "gosick-black-reaper", "name": "Black Reaper Arc", "start_chapter": 1, "end_chapter": 7, "order": 1},
+        {"id": "gosick-queen-berry", "name": "Queen Berry Arc", "start_chapter": 8, "end_chapter": 14, "order": 2},
+        {"id": "gosick-gray-wolf-village", "name": "Gray Wolf Village Arc", "start_chapter": 15, "end_chapter": 21, "order": 3},
+        {"id": "gosick-summer-solstice", "name": "Summer Solstice Arc", "start_chapter": 22, "end_chapter": 28, "order": 4},
+    ],
+    "konosuba": [
+        {"id": "kono-axel", "name": "Arrival in Axel Arc", "start_chapter": 1, "end_chapter": 8, "order": 1},
+        {"id": "kono-kyouya", "name": "Kyouya Arc", "start_chapter": 9, "end_chapter": 20, "order": 2},
+        {"id": "kono-destroyer", "name": "Destroyer Arc", "start_chapter": 21, "end_chapter": 33, "order": 3},
+        {"id": "kono-wiz-vanir", "name": "Wiz and Vanir Arc", "start_chapter": 34, "end_chapter": 47, "order": 4},
+        {"id": "kono-crimson-magic", "name": "Crimson Magic Clan Arc", "start_chapter": 48, "end_chapter": 71, "order": 5},
+        {"id": "kono-alcanretia", "name": "Alcanretia Arc", "start_chapter": 72, "end_chapter": 95, "order": 6},
+        {"id": "kono-royal-capital", "name": "Royal Capital Arc", "start_chapter": 96, "end_chapter": 114, "order": 7},
+        {"id": "kono-current", "name": "Current Arc", "start_chapter": 115, "end_chapter": None, "order": 8},
+    ],
+    "solo_leveling": [
+        {"id": "sl-d-rank-dungeon", "name": "D-Rank Dungeon Arc", "start_chapter": 1, "end_chapter": 10, "order": 1},
+        {"id": "sl-reawakening", "name": "Reawakening Arc", "start_chapter": 11, "end_chapter": 17, "order": 2},
+        {"id": "sl-instant-dungeon", "name": "Instant Dungeon Arc", "start_chapter": 18, "end_chapter": 24, "order": 3},
+        {"id": "sl-job-change", "name": "Job Change Arc", "start_chapter": 25, "end_chapter": 45, "order": 4},
+        {"id": "sl-red-gate", "name": "Red Gate Arc", "start_chapter": 46, "end_chapter": 55, "order": 5},
+        {"id": "sl-demon-castle", "name": "Demon Castle Arc", "start_chapter": 56, "end_chapter": 75, "order": 6},
+        {"id": "sl-retesting-rank", "name": "Retesting Rank Arc", "start_chapter": 76, "end_chapter": 85, "order": 7},
+        {"id": "sl-hunters-guild-gate", "name": "Hunters Guild Gate Arc", "start_chapter": 86, "end_chapter": 100, "order": 8},
+        {"id": "sl-jeju-island", "name": "Jeju Island Arc", "start_chapter": 101, "end_chapter": 110, "order": 9},
+        {"id": "sl-recruitment", "name": "Recruitment Arc", "start_chapter": 111, "end_chapter": 131, "order": 10},
+        {"id": "sl-double-dungeon", "name": "Double Dungeon Arc", "start_chapter": 132, "end_chapter": 139, "order": 11},
+        {"id": "sl-japan-crisis", "name": "Japan Crisis Arc", "start_chapter": 140, "end_chapter": 149, "order": 12},
+        {"id": "sl-international-guild", "name": "International Guild Conference Arc", "start_chapter": 150, "end_chapter": 166, "order": 13},
+        {"id": "sl-monarchs-war", "name": "Monarchs War Arc", "start_chapter": 167, "end_chapter": 177, "order": 14},
+        {"id": "sl-final-battle", "name": "Final Battle Arc", "start_chapter": 178, "end_chapter": 200, "order": 15},
+    ],
+    "the_beginning_after_the_end": [
+        {"id": "tbate-reincarnation", "name": "King Grey's Reincarnation Arc", "start_chapter": 1, "end_chapter": 10, "order": 1},
+        {"id": "tbate-twin-horns", "name": "Twin Horns Arc", "start_chapter": 11, "end_chapter": 24, "order": 2},
+        {"id": "tbate-xyrus-academy", "name": "Xyrus Academy Arc", "start_chapter": 25, "end_chapter": 53, "order": 3},
+        {"id": "tbate-lucas-wykes", "name": "Lucas Wykes Arc", "start_chapter": 54, "end_chapter": 74, "order": 4},
+        {"id": "tbate-adventurer", "name": "Adventurer Arc", "start_chapter": 75, "end_chapter": 98, "order": 5},
+        {"id": "tbate-war", "name": "Dicathen War Arc", "start_chapter": 99, "end_chapter": 138, "order": 6},
+        {"id": "tbate-relictombs", "name": "Relictombs Arc", "start_chapter": 139, "end_chapter": 174, "order": 7},
+        {"id": "tbate-victoriad", "name": "Victoriad Arc", "start_chapter": 175, "end_chapter": 207, "order": 8},
+        {"id": "tbate-current", "name": "Current Arc", "start_chapter": 208, "end_chapter": None, "order": 9},
+    ],
 }
 
 
+class ArcExternalResolver:
+    """Best-effort external arc resolver using Wikipedia search + plaintext extract parsing."""
+
+    ARC_LINE_PATTERNS = [
+        re.compile(
+            r"(?P<name>[A-Z][A-Za-z0-9'’:\- ,/]+?(?:Arc|Saga|Part))\s*"
+            r"\((?:chapters?|chapter|ch\.?)\s*"
+            r"(?P<start>\d+(?:\.\d+)?)\s*(?:-|–|—|to)\s*(?P<end>\d+(?:\.\d+)?)\)",
+            flags=re.IGNORECASE,
+        ),
+        re.compile(
+            r"(?P<name>[A-Z][A-Za-z0-9'’:\- ,/]+?(?:Arc|Saga|Part))[^\n]{0,100}?"
+            r"(?:chapters?|chapter|ch\.?)\s*(?P<start>\d+(?:\.\d+)?)\s*(?:-|–|—|to)\s*(?P<end>\d+(?:\.\d+)?)",
+            flags=re.IGNORECASE,
+        ),
+    ]
+
+    def __init__(
+        self,
+        *,
+        enabled: bool = False,
+        timeout_seconds: float = 8.0,
+        max_search_results: int = 5,
+    ) -> None:
+        self.enabled = enabled
+        self.timeout_seconds = timeout_seconds
+        self.max_search_results = max(1, max_search_results)
+
+    def resolve(self, series_title: str) -> tuple[list[dict], str] | None:
+        if not self.enabled:
+            return None
+
+        candidate_queries = self._candidate_queries(series_title)
+        checked_pages: set[str] = set()
+
+        for query in candidate_queries:
+            page_titles = self._search_wikipedia_pages(query)
+            for page_title in page_titles:
+                if page_title in checked_pages:
+                    continue
+                checked_pages.add(page_title)
+
+                extract = self._fetch_page_extract(page_title)
+                if not extract:
+                    continue
+
+                items = self._extract_arc_items(extract)
+                if self._is_reasonable(items):
+                    source = f"external:wikipedia:{self._slug(page_title)}"
+                    return items, source
+
+        return None
+
+    def _candidate_queries(self, title: str) -> list[str]:
+        cleaned = re.sub(r"\s*\((en|english)\)\s*$", "", title, flags=re.IGNORECASE).strip()
+        normalized = re.sub(r"[_]+", " ", cleaned)
+        canonical = re.sub(r"[^A-Za-z0-9 ]+", " ", normalized)
+        canonical = re.sub(r"\s+", " ", canonical).strip()
+
+        queries = [
+            f"{normalized} manga story arcs",
+            f"{canonical} manga story arcs" if canonical else normalized,
+            f"{normalized} manga arcs chapters",
+            f"{canonical} manga arcs chapters" if canonical else normalized,
+            f"{normalized} manga",
+        ]
+
+        unique: list[str] = []
+        seen: set[str] = set()
+        for query in queries:
+            q = query.strip()
+            if not q or q in seen:
+                continue
+            seen.add(q)
+            unique.append(q)
+        return unique
+
+    def _search_wikipedia_pages(self, query: str) -> list[str]:
+        params = parse.urlencode(
+            {
+                "action": "query",
+                "format": "json",
+                "list": "search",
+                "srsearch": query,
+                "srlimit": self.max_search_results,
+                "utf8": 1,
+            }
+        )
+        url = f"{WIKIPEDIA_API_ENDPOINT}?{params}"
+        data = self._fetch_json(url)
+        if not isinstance(data, dict):
+            return []
+
+        results = data.get("query", {}).get("search", [])
+        titles: list[str] = []
+        if isinstance(results, list):
+            for result in results:
+                if not isinstance(result, dict):
+                    continue
+                title = result.get("title")
+                if isinstance(title, str) and title.strip():
+                    titles.append(title.strip())
+        return titles
+
+    def _fetch_page_extract(self, page_title: str) -> str:
+        params = parse.urlencode(
+            {
+                "action": "query",
+                "format": "json",
+                "prop": "extracts",
+                "explaintext": 1,
+                "redirects": 1,
+                "titles": page_title,
+                "utf8": 1,
+            }
+        )
+        url = f"{WIKIPEDIA_API_ENDPOINT}?{params}"
+        data = self._fetch_json(url)
+        if not isinstance(data, dict):
+            return ""
+
+        pages = data.get("query", {}).get("pages", {})
+        if not isinstance(pages, dict):
+            return ""
+
+        for page_data in pages.values():
+            if not isinstance(page_data, dict):
+                continue
+            extract = page_data.get("extract")
+            if isinstance(extract, str) and extract.strip():
+                return extract
+        return ""
+
+    def _fetch_json(self, url: str) -> dict | list | None:
+        req = request.Request(
+            url,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "manga-reader-arc-resolver/1.0",
+            },
+        )
+        try:
+            with request.urlopen(req, timeout=self.timeout_seconds) as resp:
+                payload = resp.read().decode("utf-8")
+        except Exception:  # noqa: BLE001
+            return None
+
+        try:
+            return json.loads(payload)
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _extract_arc_items(self, text: str) -> list[dict]:
+        matches: list[tuple[str, float, float]] = []
+
+        for pattern in self.ARC_LINE_PATTERNS:
+            for match in pattern.finditer(text):
+                name = self._clean_name(match.group("name"))
+                start = ArcCatalog._coerce_number(match.group("start"))
+                end = ArcCatalog._coerce_number(match.group("end"))
+                if not name or start is None or end is None:
+                    continue
+                if end < start:
+                    continue
+                matches.append((name, start, end))
+
+        if not matches:
+            return []
+
+        dedup: dict[str, tuple[str, float, float]] = {}
+        for name, start, end in matches:
+            key = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+            current = dedup.get(key)
+            if current is None or start < current[1]:
+                dedup[key] = (name, start, end)
+
+        ordered = sorted(dedup.values(), key=lambda item: (item[1], item[2], item[0].lower()))
+        items: list[dict] = []
+        for idx, (name, start, end) in enumerate(ordered, start=1):
+            items.append(
+                {
+                    "id": f"{self._slug(name)}-{idx:02d}",
+                    "name": name,
+                    "start_chapter": start,
+                    "end_chapter": end,
+                    "order": idx,
+                }
+            )
+
+        return items
+
+    @staticmethod
+    def _clean_name(name: str) -> str:
+        cleaned = re.sub(r"\s+", " ", name).strip(" -:\t")
+        return cleaned
+
+    @staticmethod
+    def _is_reasonable(items: list[dict]) -> bool:
+        if len(items) < 2:
+            return False
+
+        starts = [ArcCatalog._coerce_number(item.get("start_chapter")) for item in items]
+        ends = [ArcCatalog._coerce_number(item.get("end_chapter")) for item in items]
+
+        if any(value is None for value in starts) or any(value is None for value in ends):
+            return False
+        if any(float(s) <= 0 for s in starts if s is not None):
+            return False
+        if any(float(e) > 6000 for e in ends if e is not None):
+            return False
+        if starts != sorted(starts):
+            return False
+        return True
+
+    @staticmethod
+    def _slug(text: str) -> str:
+        slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+        return slug or "arc"
+
+
 class ArcCatalog:
-    def __init__(self, library: MangaLibrary, cache_root: Path, template_root: Path | None = None) -> None:
+    def __init__(
+        self,
+        library: MangaLibrary,
+        cache_root: Path,
+        template_root: Path | None = None,
+        external_resolver: ArcExternalResolver | None = None,
+    ) -> None:
         self.library = library
         self.cache_root = cache_root.expanduser().resolve()
         if template_root is None:
             template_root = self.cache_root.parent / "arc_templates"
         self.template_root = template_root.expanduser().resolve()
+        self.external_resolver = external_resolver or ArcExternalResolver(enabled=False)
 
     def list_arcs(self, series_id: str, *, force_refresh: bool = False) -> list[dict]:
         series = self._series_by_id(series_id)
@@ -258,7 +561,37 @@ class ArcCatalog:
         signature = self._volumes_signature(volumes)
 
         source_key = self._resolve_source_key(series_title)
-        template_items = self._read_template(series_id)
+        template_payload = self._read_template_payload(series_id)
+        template_items = self._normalize_items(template_payload["items"]) if template_payload is not None else None
+        template_auto_generated = bool(template_payload.get("auto_generated")) if template_payload is not None else False
+
+        if source_key is not None:
+            builtin_source = f"builtin:{source_key}"
+            builtin_items = self._normalize_items(BUILTIN_ARCS[source_key])
+
+            # Replace prior auto-generated templates with deterministic builtin arc maps.
+            if template_payload is not None and template_auto_generated:
+                self._write_template(
+                    series_id=series_id,
+                    series_title=series_title,
+                    auto_generated=False,
+                    source=builtin_source,
+                    items=builtin_items,
+                )
+
+            cached_builtin = None if force_refresh else self._read_cache_payload(series_id, signature)
+            if cached_builtin is not None and str(cached_builtin.get("source") or "").startswith("builtin:"):
+                return self._normalize_items(cached_builtin["items"])
+
+            self._write_cache(
+                series_id=series_id,
+                series_title=series_title,
+                source=builtin_source,
+                series_signature=signature,
+                items=builtin_items,
+            )
+            return builtin_items
+
         cached = None if force_refresh else self._read_cache_payload(series_id, signature)
         if cached is not None:
             cached_items = self._normalize_items(cached["items"])
@@ -282,23 +615,71 @@ class ArcCatalog:
                 )
                 return migrated_items
 
+            # When template entries were auto-generated from inferred ranges,
+            # try to upgrade them using external metadata during sync/read.
+            if source_key is None and template_auto_generated:
+                external = self._resolve_external_items(series_title)
+                if external is not None:
+                    external_items, external_source = external
+                    self._write_template(
+                        series_id=series_id,
+                        series_title=series_title,
+                        auto_generated=False,
+                        source=external_source,
+                        items=external_items,
+                    )
+                    self._write_cache(
+                        series_id=series_id,
+                        series_title=series_title,
+                        source=external_source,
+                        series_signature=signature,
+                        items=external_items,
+                    )
+                    return external_items
+
             return cached_items
 
         if template_items is not None:
-            items = template_items
-            source_name = "template:series-id"
+            if source_key is None and template_auto_generated and force_refresh:
+                external = self._resolve_external_items(series_title)
+                if external is not None:
+                    items, source_name = external
+                    self._write_template(
+                        series_id=series_id,
+                        series_title=series_title,
+                        auto_generated=False,
+                        source=source_name,
+                        items=items,
+                    )
+                else:
+                    items = template_items
+                    source_name = str(template_payload.get("source") or "template:series-id") if template_payload is not None else "template:series-id"
+            else:
+                items = template_items
+                source_name = str(template_payload.get("source") or "template:series-id") if template_payload is not None else "template:series-id"
         else:
             if source_key:
                 items = self._normalize_items(BUILTIN_ARCS[source_key])
                 source_name = f"builtin:{source_key}"
             else:
-                inferred_items = self._infer_items_from_volumes(series_title, volumes)
-                if inferred_items:
-                    items = self._ensure_template_for_inferred(series_id, series_title, inferred_items)
-                    source_name = "generated:series-template"
+                external = self._resolve_external_items(series_title)
+                if external is not None:
+                    items, source_name = external
+                    self._write_template(
+                        series_id=series_id,
+                        series_title=series_title,
+                        auto_generated=False,
+                        source=source_name,
+                        items=items,
+                    )
                 else:
-                    items = []
-                    source_name = "none"
+                    inferred_items = self._infer_items_from_volumes(series_title, volumes)
+                    if inferred_items:
+                        items = self._ensure_template_for_inferred(series_id, series_title, inferred_items)
+                        source_name = "generated:series-template"
+                    else:
+                        items = []
+                        source_name = "none"
 
         self._write_cache(
             series_id=series_id,
@@ -358,7 +739,7 @@ class ArcCatalog:
     def _template_path(self, series_id: str) -> Path:
         return self.template_root / f"{series_id}.json"
 
-    def _read_template(self, series_id: str) -> list[dict] | None:
+    def _read_template_payload(self, series_id: str) -> dict | None:
         path = self._template_path(series_id)
         if not path.is_file():
             return None
@@ -371,7 +752,8 @@ class ArcCatalog:
         items = raw.get("items")
         if not isinstance(items, list):
             return None
-        return self._normalize_items(items)
+        raw["items"] = self._normalize_items(items)
+        return raw
 
     def _ensure_template_for_inferred(
         self,
@@ -379,15 +761,16 @@ class ArcCatalog:
         series_title: str,
         inferred_items: list[dict],
     ) -> list[dict]:
-        existing = self._read_template(series_id)
+        existing = self._read_template_payload(series_id)
         if existing is not None:
-            return existing
+            return self._normalize_items(existing.get("items", []))
 
         template_items = self._placeholder_items_from_inferred(series_title, inferred_items)
         self._write_template(
             series_id=series_id,
             series_title=series_title,
             auto_generated=True,
+            source="generated:series-template",
             items=template_items,
         )
         return template_items
@@ -397,6 +780,7 @@ class ArcCatalog:
         series_id: str,
         series_title: str,
         auto_generated: bool,
+        source: str,
         items: list[dict],
     ) -> None:
         self.template_root.mkdir(parents=True, exist_ok=True)
@@ -404,6 +788,7 @@ class ArcCatalog:
             "series_id": series_id,
             "series_title": series_title,
             "auto_generated": auto_generated,
+            "source": source,
             "updated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "items": items,
         }
@@ -434,6 +819,17 @@ class ArcCatalog:
             )
 
         return placeholders
+
+    def _resolve_external_items(self, series_title: str) -> tuple[list[dict], str] | None:
+        external = self.external_resolver.resolve(series_title)
+        if external is None:
+            return None
+
+        items, source = external
+        normalized = self._normalize_items(items)
+        if len(normalized) < 2:
+            return None
+        return normalized, source
 
     def _read_cache_payload(self, series_id: str, signature: str) -> dict | None:
         path = self._cache_path(series_id)

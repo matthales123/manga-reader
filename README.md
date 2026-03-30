@@ -22,7 +22,7 @@ manga-reader/
 - Lists series, volumes, pages
 - Serves optional series cover images (`cover.jpg`, `folder.jpg`, `poster.jpg`)
 - Serves story-arc metadata for supported series via `/api/library/series/{series_id}/arcs`
-- Auto-generates named arc templates for new unknown series (`backend/arc_templates/*.json`) so new additions get arc sections immediately
+- Tries external arc lookup for unknown series (best-effort Wikipedia resolver), then falls back to auto-generated named templates (`backend/arc_templates/*.json`)
 - Streams page image bytes for reader display
 - Rejects invalid/traversal-style path access
 
@@ -46,6 +46,8 @@ ARC_SYNC_ON_STARTUP=true
 ARC_SYNC_INTERVAL_SECONDS=60
 ARC_INDEX_ROOT=/home/mhales/manga-reader/backend/arc_index
 ARC_TEMPLATE_ROOT=/home/mhales/manga-reader/backend/arc_templates
+ARC_EXTERNAL_LOOKUP_ENABLED=true
+ARC_EXTERNAL_LOOKUP_TIMEOUT_SECONDS=8
 ```
 
 3. Install dependencies:

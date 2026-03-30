@@ -4,6 +4,8 @@ import base64
 import json
 import zipfile
 
+import app.main as main_module
+
 
 def write_image(path, payload: bytes = b"fake-image") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -145,22 +147,22 @@ def test_series_arcs_endpoint_prefers_cached_data(client_and_root):
     client, root = client_and_root
 
     for page in ["001.jpg", "002.jpg", "003.jpg"]:
-        write_image(root / "One Piece" / "Vol 001" / page)
+        write_image(root / "My Custom Series" / "Vol 001" / page)
 
     series_resp = client.get("/api/library/series")
-    series_item = next(item for item in series_resp.json()["items"] if item["title"] == "One Piece")
+    series_item = next(item for item in series_resp.json()["items"] if item["title"] == "My Custom Series")
     series_id = series_item["id"]
 
     cache_root = root / "_arc_index"
     cache_root.mkdir(parents=True, exist_ok=True)
     (cache_root / f"{series_id}.json").write_text(
         json.dumps(
-            {
-                "series_id": series_id,
-                "series_title": "One Piece",
-                "source": "test-override",
-                "updated_at": "2026-03-29T00:00:00Z",
-                "items": [
+                {
+                    "series_id": series_id,
+                    "series_title": "My Custom Series",
+                    "source": "test-override",
+                    "updated_at": "2026-03-29T00:00:00Z",
+                    "items": [
                     {
                         "id": "op-custom-arc",
                         "name": "Custom Arc",
@@ -188,25 +190,25 @@ def test_series_arcs_migrates_old_inferred_cache_to_named_template(client_and_ro
     client, root = client_and_root
 
     for chapter in range(1, 31):
-        chapter_dir = root / "Black Clover" / f"Chapter {chapter}"
+        chapter_dir = root / "Mystery Manga" / f"Chapter {chapter}"
         chapter_dir.mkdir(parents=True, exist_ok=True)
         for page in ["001.jpg", "002.jpg", "003.jpg"]:
             (chapter_dir / page).write_bytes(b"img")
 
     series_resp = client.get("/api/library/series")
-    series_item = next(item for item in series_resp.json()["items"] if item["title"] == "Black Clover")
+    series_item = next(item for item in series_resp.json()["items"] if item["title"] == "Mystery Manga")
     series_id = series_item["id"]
 
     cache_root = root / "_arc_index"
     cache_root.mkdir(parents=True, exist_ok=True)
     (cache_root / f"{series_id}.json").write_text(
         json.dumps(
-            {
-                "series_id": series_id,
-                "series_title": "Black Clover",
-                "source": "inferred:chapter-buckets",
-                "updated_at": "2026-03-29T00:00:00Z",
-                "items": [
+                {
+                    "series_id": series_id,
+                    "series_title": "Mystery Manga",
+                    "source": "inferred:chapter-buckets",
+                    "updated_at": "2026-03-29T00:00:00Z",
+                    "items": [
                     {
                         "id": "black-clover-chapters-1-to-25",
                         "name": "Chapters 1-25",
@@ -237,6 +239,45 @@ def test_series_arcs_migrates_old_inferred_cache_to_named_template(client_and_ro
 
     template_path = root / "arc_templates" / f"{series_id}.json"
     assert template_path.exists()
+
+
+def test_series_arcs_uses_external_resolver_for_unknown_series(client_and_root):
+    client, root = client_and_root
+
+    for chapter in range(1, 41):
+        chapter_dir = root / "My New Series" / f"Chapter {chapter}"
+        chapter_dir.mkdir(parents=True, exist_ok=True)
+        for page in ["001.jpg", "002.jpg", "003.jpg"]:
+            (chapter_dir / page).write_bytes(b"img")
+
+    class StubResolver:
+        def resolve(self, series_title: str):
+            if series_title != "My New Series":
+                return None
+            return (
+                [
+                    {"id": "mns-first", "name": "First Arc", "start_chapter": 1, "end_chapter": 20, "order": 1},
+                    {"id": "mns-second", "name": "Second Arc", "start_chapter": 21, "end_chapter": 40, "order": 2},
+                ],
+                "external:test-stub",
+            )
+
+    main_module.arc_catalog.external_resolver = StubResolver()
+
+    series_resp = client.get("/api/library/series")
+    series_item = next(item for item in series_resp.json()["items"] if item["title"] == "My New Series")
+    series_id = series_item["id"]
+
+    arcs_resp = client.get(f"/api/library/series/{series_id}/arcs")
+    assert arcs_resp.status_code == 200
+    items = arcs_resp.json()["items"]
+
+    assert [item["name"] for item in items] == ["First Arc", "Second Arc"]
+
+    template_path = root / "arc_templates" / f"{series_id}.json"
+    template_raw = json.loads(template_path.read_text(encoding="utf-8"))
+    assert template_raw["source"] == "external:test-stub"
+    assert template_raw["auto_generated"] is False
 
 
 def test_series_arcs_endpoint_autogenerates_named_template_for_unknown_series(client_and_root):
