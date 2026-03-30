@@ -184,6 +184,61 @@ def test_series_arcs_endpoint_prefers_cached_data(client_and_root):
     assert items[0]["end_chapter"] == 20.0
 
 
+def test_series_arcs_migrates_old_inferred_cache_to_named_template(client_and_root):
+    client, root = client_and_root
+
+    for chapter in range(1, 31):
+        chapter_dir = root / "Black Clover" / f"Chapter {chapter}"
+        chapter_dir.mkdir(parents=True, exist_ok=True)
+        for page in ["001.jpg", "002.jpg", "003.jpg"]:
+            (chapter_dir / page).write_bytes(b"img")
+
+    series_resp = client.get("/api/library/series")
+    series_item = next(item for item in series_resp.json()["items"] if item["title"] == "Black Clover")
+    series_id = series_item["id"]
+
+    cache_root = root / "_arc_index"
+    cache_root.mkdir(parents=True, exist_ok=True)
+    (cache_root / f"{series_id}.json").write_text(
+        json.dumps(
+            {
+                "series_id": series_id,
+                "series_title": "Black Clover",
+                "source": "inferred:chapter-buckets",
+                "updated_at": "2026-03-29T00:00:00Z",
+                "items": [
+                    {
+                        "id": "black-clover-chapters-1-to-25",
+                        "name": "Chapters 1-25",
+                        "start_chapter": 1,
+                        "end_chapter": 25,
+                        "order": 1,
+                    },
+                    {
+                        "id": "black-clover-chapters-26-to-30",
+                        "name": "Chapters 26-30",
+                        "start_chapter": 26,
+                        "end_chapter": 30,
+                        "order": 2,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    arcs_resp = client.get(f"/api/library/series/{series_id}/arcs")
+    assert arcs_resp.status_code == 200
+    items = arcs_resp.json()["items"]
+    assert [item["name"] for item in items] == ["Arc 01", "Arc 02"]
+    assert items[0]["start_chapter"] == 1.0
+    assert items[1]["start_chapter"] == 26.0
+    assert items[1]["end_chapter"] is None
+
+    template_path = root / "arc_templates" / f"{series_id}.json"
+    assert template_path.exists()
+
+
 def test_series_arcs_endpoint_autogenerates_named_template_for_unknown_series(client_and_root):
     client, root = client_and_root
 

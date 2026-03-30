@@ -257,16 +257,37 @@ class ArcCatalog:
         volumes = self.library.list_volumes(series_id)
         signature = self._volumes_signature(volumes)
 
-        cached = None if force_refresh else self._read_cache(series_id, signature)
-        if cached is not None:
-            return cached
-
+        source_key = self._resolve_source_key(series_title)
         template_items = self._read_template(series_id)
+        cached = None if force_refresh else self._read_cache_payload(series_id, signature)
+        if cached is not None:
+            cached_items = self._normalize_items(cached["items"])
+            cached_source = str(cached.get("source") or "")
+
+            # Migrate old inferred cache entries to template-based arcs so new
+            # unknown series stop showing "Chapters 1-25" labels.
+            if (
+                cached_source == "inferred:chapter-buckets"
+                and source_key is None
+                and template_items is None
+                and cached_items
+            ):
+                migrated_items = self._ensure_template_for_inferred(series_id, series_title, cached_items)
+                self._write_cache(
+                    series_id=series_id,
+                    series_title=series_title,
+                    source="generated:series-template",
+                    series_signature=signature,
+                    items=migrated_items,
+                )
+                return migrated_items
+
+            return cached_items
+
         if template_items is not None:
             items = template_items
             source_name = "template:series-id"
         else:
-            source_key = self._resolve_source_key(series_title)
             if source_key:
                 items = self._normalize_items(BUILTIN_ARCS[source_key])
                 source_name = f"builtin:{source_key}"
@@ -414,7 +435,7 @@ class ArcCatalog:
 
         return placeholders
 
-    def _read_cache(self, series_id: str, signature: str) -> list[dict] | None:
+    def _read_cache_payload(self, series_id: str, signature: str) -> dict | None:
         path = self._cache_path(series_id)
         if not path.is_file():
             return None
@@ -432,7 +453,7 @@ class ArcCatalog:
         if cached_signature and isinstance(cached_signature, str) and cached_signature != signature:
             return None
 
-        return self._normalize_items(items)
+        return raw
 
     def _write_cache(
         self,
