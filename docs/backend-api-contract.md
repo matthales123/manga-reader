@@ -88,7 +88,9 @@ Notes:
 - `start_chapter` and `end_chapter` are nullable numeric values.
 - Returns `items: []` when no arc data is available for the series.
 - Server caches normalized arc responses under `ARC_INDEX_ROOT` (default: `backend/arc_index`).
-- For unknown series, server auto-inferrs chapter bucket arcs from chapter-style names (`Chapter 1`, `Episode 1`, etc.).
+- For unknown series, server auto-infers chapter buckets from chapter-style names (`Chapter 1`, `Episode 1`, etc.).
+- Unknown series now auto-generate a per-series template file under `ARC_TEMPLATE_ROOT` (default: `backend/arc_templates`) and return named arcs (`Arc 01`, `Arc 02`, ...).
+- You can manually edit a series template file to replace placeholder names with real arc names; backend will use that template automatically.
 
 ## Sync Arc Cache
 `POST /api/library/arcs/sync`
@@ -111,6 +113,7 @@ Response:
 Background behavior:
 - On backend startup, arc cache sync runs once when `ARC_SYNC_ON_STARTUP=true`.
 - Then runs periodically every `ARC_SYNC_INTERVAL_SECONDS` (minimum loop interval is 30 seconds).
+- During sync, unknown series with sufficient chapter data get auto-generated arc template files if missing.
 
 ## List Pages
 `GET /api/library/volumes/{volume_id}/pages`

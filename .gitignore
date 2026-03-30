@@ -12,6 +12,7 @@ backend/.venv/
 backend/.coverage
 backend/htmlcov/
 backend/arc_index/*.json
+backend/arc_templates/*.json
 
 # macOS
 .DS_Store

@@ -184,7 +184,7 @@ def test_series_arcs_endpoint_prefers_cached_data(client_and_root):
     assert items[0]["end_chapter"] == 20.0
 
 
-def test_series_arcs_endpoint_infers_chapter_buckets_for_unknown_series(client_and_root):
+def test_series_arcs_endpoint_autogenerates_named_template_for_unknown_series(client_and_root):
     client, root = client_and_root
 
     for chapter in range(1, 31):
@@ -201,11 +201,14 @@ def test_series_arcs_endpoint_infers_chapter_buckets_for_unknown_series(client_a
     assert arcs_resp.status_code == 200
     items = arcs_resp.json()["items"]
 
-    assert [item["name"] for item in items] == ["Chapters 1-25", "Chapters 26-30"]
+    assert [item["name"] for item in items] == ["Arc 01", "Arc 02"]
     assert items[0]["start_chapter"] == 1.0
     assert items[0]["end_chapter"] == 25.0
     assert items[1]["start_chapter"] == 26.0
-    assert items[1]["end_chapter"] == 30.0
+    assert items[1]["end_chapter"] is None
+
+    template_path = root / "arc_templates" / f"{series_id}.json"
+    assert template_path.exists()
 
 
 def test_arcs_sync_endpoint_creates_cache_for_series(client_and_root):

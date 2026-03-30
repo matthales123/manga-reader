@@ -235,9 +235,12 @@ BUILTIN_ARCS: dict[str, list[RawArc]] = {
 
 
 class ArcCatalog:
-    def __init__(self, library: MangaLibrary, cache_root: Path) -> None:
+    def __init__(self, library: MangaLibrary, cache_root: Path, template_root: Path | None = None) -> None:
         self.library = library
         self.cache_root = cache_root.expanduser().resolve()
+        if template_root is None:
+            template_root = self.cache_root.parent / "arc_templates"
+        self.template_root = template_root.expanduser().resolve()
 
     def list_arcs(self, series_id: str, *, force_refresh: bool = False) -> list[dict]:
         series = self._series_by_id(series_id)
@@ -245,6 +248,7 @@ class ArcCatalog:
 
     def _list_arcs_for_series(self, series: dict, *, force_refresh: bool = False) -> list[dict]:
         series_id = series["id"]
+        series_title = series["title"]
 
         # "Singles" does not represent a real named series.
         if series["relative_path"] == ".":
@@ -257,17 +261,27 @@ class ArcCatalog:
         if cached is not None:
             return cached
 
-        source_key = self._resolve_source_key(series["title"])
-        if source_key:
-            items = self._normalize_items(BUILTIN_ARCS[source_key])
-            source_name = f"builtin:{source_key}"
+        template_items = self._read_template(series_id)
+        if template_items is not None:
+            items = template_items
+            source_name = "template:series-id"
         else:
-            items = self._infer_items_from_volumes(series["title"], volumes)
-            source_name = "inferred:chapter-buckets" if items else "none"
+            source_key = self._resolve_source_key(series_title)
+            if source_key:
+                items = self._normalize_items(BUILTIN_ARCS[source_key])
+                source_name = f"builtin:{source_key}"
+            else:
+                inferred_items = self._infer_items_from_volumes(series_title, volumes)
+                if inferred_items:
+                    items = self._ensure_template_for_inferred(series_id, series_title, inferred_items)
+                    source_name = "generated:series-template"
+                else:
+                    items = []
+                    source_name = "none"
 
         self._write_cache(
             series_id=series_id,
-            series_title=series["title"],
+            series_title=series_title,
             source=source_name,
             series_signature=signature,
             items=items,
@@ -319,6 +333,86 @@ class ArcCatalog:
 
     def _cache_path(self, series_id: str) -> Path:
         return self.cache_root / f"{series_id}.json"
+
+    def _template_path(self, series_id: str) -> Path:
+        return self.template_root / f"{series_id}.json"
+
+    def _read_template(self, series_id: str) -> list[dict] | None:
+        path = self._template_path(series_id)
+        if not path.is_file():
+            return None
+
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            return None
+
+        items = raw.get("items")
+        if not isinstance(items, list):
+            return None
+        return self._normalize_items(items)
+
+    def _ensure_template_for_inferred(
+        self,
+        series_id: str,
+        series_title: str,
+        inferred_items: list[dict],
+    ) -> list[dict]:
+        existing = self._read_template(series_id)
+        if existing is not None:
+            return existing
+
+        template_items = self._placeholder_items_from_inferred(series_title, inferred_items)
+        self._write_template(
+            series_id=series_id,
+            series_title=series_title,
+            auto_generated=True,
+            items=template_items,
+        )
+        return template_items
+
+    def _write_template(
+        self,
+        series_id: str,
+        series_title: str,
+        auto_generated: bool,
+        items: list[dict],
+    ) -> None:
+        self.template_root.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "series_id": series_id,
+            "series_title": series_title,
+            "auto_generated": auto_generated,
+            "updated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "items": items,
+        }
+        self._template_path(series_id).write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+
+    def _placeholder_items_from_inferred(self, series_title: str, inferred_items: list[dict]) -> list[dict]:
+        series_slug = self._slug(series_title)
+        normalized_inferred = self._normalize_items(inferred_items)
+        placeholders: list[dict] = []
+        for idx, item in enumerate(normalized_inferred, start=1):
+            end = item["end_chapter"]
+            if idx == len(normalized_inferred):
+                # Keep latest arc open-ended so newly downloaded chapters continue
+                # to map without requiring immediate template edits.
+                end = None
+
+            placeholders.append(
+                {
+                    "id": f"{series_slug}-arc-{idx:02d}",
+                    "name": f"Arc {idx:02d}",
+                    "start_chapter": item["start_chapter"],
+                    "end_chapter": end,
+                    "order": idx,
+                }
+            )
+
+        return placeholders
 
     def _read_cache(self, series_id: str, signature: str) -> list[dict] | None:
         path = self._cache_path(series_id)

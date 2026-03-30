@@ -22,7 +22,8 @@ def parse_allowed_origins() -> list[str]:
 MANGA_ROOT = Path(os.getenv("MANGA_ROOT", "/home/mhales/NAS/Manga"))
 library = MangaLibrary(MANGA_ROOT)
 ARC_INDEX_ROOT = Path(os.getenv("ARC_INDEX_ROOT", str((Path(__file__).resolve().parents[1] / "arc_index"))))
-arc_catalog = ArcCatalog(library=library, cache_root=ARC_INDEX_ROOT)
+ARC_TEMPLATE_ROOT = Path(os.getenv("ARC_TEMPLATE_ROOT", str((Path(__file__).resolve().parents[1] / "arc_templates"))))
+arc_catalog = ArcCatalog(library=library, cache_root=ARC_INDEX_ROOT, template_root=ARC_TEMPLATE_ROOT)
 ARC_SYNC_INTERVAL_SECONDS = int(os.getenv("ARC_SYNC_INTERVAL_SECONDS", "300"))
 ARC_SYNC_ON_STARTUP = os.getenv("ARC_SYNC_ON_STARTUP", "true").lower() in {"1", "true", "yes", "on"}
 

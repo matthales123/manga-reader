@@ -22,6 +22,7 @@ manga-reader/
 - Lists series, volumes, pages
 - Serves optional series cover images (`cover.jpg`, `folder.jpg`, `poster.jpg`)
 - Serves story-arc metadata for supported series via `/api/library/series/{series_id}/arcs`
+- Auto-generates named arc templates for new unknown series (`backend/arc_templates/*.json`) so new additions get arc sections immediately
 - Streams page image bytes for reader display
 - Rejects invalid/traversal-style path access
 
@@ -41,6 +42,10 @@ MANGA_ROOT=/mnt/jellyfin/Manga
 CORS_ALLOW_ORIGINS=*
 HOST=0.0.0.0
 PORT=8080
+ARC_SYNC_ON_STARTUP=true
+ARC_SYNC_INTERVAL_SECONDS=60
+ARC_INDEX_ROOT=/home/mhales/manga-reader/backend/arc_index
+ARC_TEMPLATE_ROOT=/home/mhales/manga-reader/backend/arc_templates
 ```
 
 3. Install dependencies:
