@@ -107,6 +107,25 @@ def test_series_arcs_endpoint_builtin_resolution(client_and_root):
     assert [arc["order"] for arc in items] == sorted(arc["order"] for arc in items)
 
 
+def test_series_arcs_endpoint_builtin_resolution_title_variant(client_and_root):
+    client, root = client_and_root
+
+    for page in ["001.jpg", "002.jpg", "003.jpg"]:
+        write_image(root / "Demon Slayer - Kimetsu no Yaiba" / "Episode 001" / page)
+
+    series_resp = client.get("/api/library/series")
+    series_item = next(item for item in series_resp.json()["items"] if item["title"] == "Demon Slayer - Kimetsu no Yaiba")
+    series_id = series_item["id"]
+
+    arcs_resp = client.get(f"/api/library/series/{series_id}/arcs")
+    assert arcs_resp.status_code == 200
+
+    items = arcs_resp.json()["items"]
+    assert len(items) >= 2
+    assert items[0]["id"] == "ds-final-selection"
+    assert items[0]["name"] == "Final Selection Arc"
+
+
 def test_series_arcs_endpoint_empty_for_unknown_series(client_and_root):
     client, root = client_and_root
 
